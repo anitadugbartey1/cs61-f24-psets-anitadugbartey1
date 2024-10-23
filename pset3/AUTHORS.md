@@ -3,13 +3,12 @@ Author and collaborators
 
 Primary student
 ---------------
-(Your name.)
+(Anita Dugbartey)
 
 
 Collaborators
 -------------
-(List any other collaborators and describe help you got from other students
-in the class.)
+(Lotus Nasser)
 
 
 Citations
