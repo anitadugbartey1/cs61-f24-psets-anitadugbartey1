@@ -10,12 +10,11 @@ extern "C" void __assert_fail(const char* assertion, const char* file, unsigned 
     // Log the assertion failure details
     log_printf("Assertion failed: %s, file %s, line %u, function %s\n", assertion, file, line, function);
     
-    // Optionally, display the panic message on the console
+    
     console_printf(CPOS(0, 0), COLOR_ERROR, "PANIC: Assertion failed: %s, file %s, line %u, function %s\n", assertion, file, line, function);
     
     // Halt the system or enter an infinite loop to stop execution
     while (true) {
-        // Optionally, implement a more graceful shutdown or recovery mechanism
     }
 }
 
@@ -79,7 +78,7 @@ int syscall_page_alloc(uintptr_t addr);
 
 void kernel_start(const char* command) {
     initialize_hardware();
-    log_printf("Starting WeensyOS - Alternative Kernel\n");
+    log_printf("Starting WeensyOS\n");
 
     ticks = 1;
     init_timer(HZ);
@@ -105,7 +104,6 @@ void kernel_start(const char* command) {
 
 static void initialize_hardware() {
     init_hardware();
-    // Additional hardware initialization can be added here
 }
 
 // initialize_memory()
@@ -564,7 +562,7 @@ void schedule() {
 
     // Spin indefinitely if no runnable processes
     while (true) {
-        // Optionally, enter a low-power state or halt
+       
     }
 }
 
