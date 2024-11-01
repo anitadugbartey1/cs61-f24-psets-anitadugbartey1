@@ -26,53 +26,72 @@ struct io61_file {
 
 // Initialize file size if needed
 static void init_filesize(io61_file* f) {
-   if (!f->size_known) {
-       struct stat st;
-       if (fstat(f->fd, &st) == 0 && S_ISREG(st.st_mode)) {
-           f->file_size = st.st_size;
-           f->size_known = true;
-       }
-   }
+    if (!f->size_known) {
+        struct stat st;
+        if (fstat(f->fd, &st) == 0) {
+            if (S_ISREG(st.st_mode)) {
+                f->file_size = st.st_size;
+                f->size_known = true;
+            } else {
+                // Try to get size using seek
+                off_t end = lseek(f->fd, 0, SEEK_END);
+                if (end >= 0) {
+                    f->file_size = end;
+                    f->size_known = true;
+                    // Return to original position
+                    lseek(f->fd, f->pos, SEEK_SET);
+                }
+            }
+        }
+    }
 }
 
 static int io61_fill_buffer(io61_file* f) {
-   // If reading in reverse, handle differently
-   if (f->reverse_mode) {
-       // Calculate read position for reverse reading
-       off_t read_size = BUFFER_SIZE;
-       off_t target_pos = f->pos - read_size;
-       if (target_pos < 0) {
-           read_size = f->pos;  // Adjust read size if near start
-           target_pos = 0;
-       }
-       
-       // Seek to the calculated position
-       off_t seek_result = lseek(f->fd, target_pos, SEEK_SET);
-       if (seek_result == -1) return -1;
-       
-       // Read the block
-       ssize_t nr = read(f->fd, f->cbuf, read_size);
-       if (nr <= 0) return nr;
-       
-       f->cbuf_size = nr;
-       f->cbuf_pos = nr - 1;  // Start from end of buffer
-       f->tag_position = target_pos;
-       return nr;
-   } else {
-       // Normal forward reading
-       if (f->pos != f->tag_position) {
-           off_t seek_result = lseek(f->fd, f->pos, SEEK_SET);
-           if (seek_result == -1) return -1;
-           f->tag_position = seek_result;
-       }
-       
-       f->cbuf_pos = 0;
-       f->cbuf_size = read(f->fd, f->cbuf, BUFFER_SIZE);
-       if (f->cbuf_size > 0) {
-           f->tag_position += f->cbuf_size;
-       }
-       return f->cbuf_size;
-   }
+    // Ensure we know the file size for reverse mode
+    if (f->reverse_mode && !f->size_known) {
+        init_filesize(f);
+    }
+
+    // If reading in reverse
+    if (f->reverse_mode) {
+        // Early return if at start of file
+        if (f->pos <= 0) {
+            return 0;  // EOF
+        }
+
+        // Calculate read position and size
+        off_t read_size = BUFFER_SIZE;
+        if (f->pos < read_size) {
+            read_size = f->pos;  // Adjust if near start of file
+        }
+        off_t target_pos = f->pos - read_size;
+
+        // Seek and read
+        off_t seek_result = lseek(f->fd, target_pos, SEEK_SET);
+        if (seek_result == -1) return -1;
+
+        ssize_t nr = read(f->fd, f->cbuf, read_size);
+        if (nr <= 0) return nr;
+
+        f->cbuf_size = nr;
+        f->cbuf_pos = nr - 1;  // Start from end
+        f->tag_position = target_pos;
+        return nr;
+    } else {
+        // Regular forward reading
+        if (f->pos != f->tag_position) {
+            off_t seek_result = lseek(f->fd, f->pos, SEEK_SET);
+            if (seek_result == -1) return -1;
+            f->tag_position = seek_result;
+        }
+        
+        f->cbuf_pos = 0;
+        f->cbuf_size = read(f->fd, f->cbuf, BUFFER_SIZE);
+        if (f->cbuf_size > 0) {
+            f->tag_position += f->cbuf_size;
+        }
+        return f->cbuf_size;
+    }
 }
 
 // io61_fdopen(fd, mode)
@@ -108,25 +127,27 @@ int io61_close(io61_file* f) {
 //    on end of file or error.
 
 int io61_readc(io61_file* f) {
-   if (f->cbuf_pos >= f->cbuf_size || f->cbuf_size == 0) {
-       ssize_t nr = io61_fill_buffer(f);
-       if (nr <= 0) {
-           if (nr == 0) {
-               errno = 0;  // clear errno for EOF
-           }
-           return -1;
-       }
-   }
-   
-   unsigned char ch;
-   if (f->reverse_mode) {
-       ch = f->cbuf[f->cbuf_pos--];
-       f->pos--;
-   } else {
-       ch = f->cbuf[f->cbuf_pos++];
-       f->pos++;
-   }
-   return ch;
+    if (f->cbuf_pos >= f->cbuf_size || f->cbuf_size == 0 ||
+        (f->reverse_mode && f->cbuf_pos == size_t(-1))) {
+        ssize_t nr = io61_fill_buffer(f);
+        if (nr <= 0) {
+            return -1;
+        }
+    }
+
+    int ch;
+    if (f->reverse_mode) {
+        // Check for buffer underflow
+        if (f->cbuf_pos == size_t(-1)) {
+            return -1;
+        }
+        ch = f->cbuf[f->cbuf_pos--];
+        f->pos--;
+    } else {
+        ch = f->cbuf[f->cbuf_pos++];
+        f->pos++;
+    }
+    return (unsigned char) ch;
 }
 
 // io61_read(f, buf, sz)
@@ -254,33 +275,72 @@ int io61_flush(io61_file* f) {
    return 0;
 }
 
-// io61_seek(f, pos)
-//    Seeks `f` to position `pos`. Returns 0 on success, -1 on failure.
+// io61_seek(f, pos, whence)
+//    Seeks `f` to position `pos`. Returns the new position on success.
+//    This is the full version that supports all seek modes.
 
-int io61_seek(io61_file* f, off_t off) {
-   // Check if seek is to current position
-   if (off == f->pos) return 0;
-   
-   // Determine if we're switching to reverse mode
-   bool new_reverse_mode = (off < f->pos);
-   
-   // If seeking within current buffer
-   off_t buf_start = f->tag_position - f->cbuf_size;
-   off_t buf_end = f->tag_position;
-   if (off >= buf_start && off < buf_end) {
-       f->cbuf_pos = off - buf_start;
-       f->pos = off;
-       f->reverse_mode = new_reverse_mode;
-       return 0;
-   }
-   
-   // Otherwise invalidate buffer and set new position
-   f->cbuf_size = 0;
-   f->cbuf_pos = 0;
-   f->pos = off;
-   f->reverse_mode = new_reverse_mode;
-   
-   return 0;
+static int io61_seek_full(io61_file* f, off_t pos, int whence) {
+    // Calculate target position
+    off_t target_pos;
+    if (whence == SEEK_CUR) {
+        target_pos = f->pos + pos;
+    } else if (whence == SEEK_END) {
+        if (!f->size_known) {
+            init_filesize(f);
+        }
+        if (f->size_known) {
+            target_pos = f->file_size + pos;
+        } else {
+            off_t seek_result = lseek(f->fd, pos, SEEK_END);
+            if (seek_result >= 0) {
+                f->pos = seek_result;
+                f->cbuf_size = 0;
+                return seek_result;
+            }
+            return -1;
+        }
+    } else {
+        target_pos = pos;
+    }
+
+    // Don't allow negative positions
+    if (target_pos < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    // If already at target, no need to change
+    if (target_pos == f->pos) {
+        return target_pos;
+    }
+
+    // Update reverse mode flag
+    f->reverse_mode = (target_pos < f->pos);
+
+    // Check if target is within current buffer
+    off_t buf_start = f->tag_position - f->cbuf_size;
+    off_t buf_end = f->tag_position;
+    if (target_pos >= buf_start && target_pos < buf_end) {
+        f->cbuf_pos = target_pos - buf_start;
+        f->pos = target_pos;
+        return target_pos;
+    }
+
+    // Flush and invalidate buffer
+    io61_flush(f);
+    f->cbuf_size = 0;
+    f->cbuf_pos = 0;
+    f->pos = target_pos;
+
+    return target_pos;
+}
+
+// io61_seek(f, pos)
+//    The simpler version that only supports SEEK_SET.
+//    This is the version expected by the test files.
+
+int io61_seek(io61_file* f, off_t pos) {
+    return io61_seek_full(f, pos, SEEK_SET);
 }
 
 // Helper functions
