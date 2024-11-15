@@ -8,8 +8,7 @@ Primary student
 
 Collaborators
 -------------
-(List any other collaborators and describe help you got from other students
-in the class.)
+(Lotus Nasser)
 
 
 Citations
