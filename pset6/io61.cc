@@ -7,6 +7,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <thread>
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 
 // io61_file
 //    Data structure for io61 file wrappers.
@@ -36,15 +41,31 @@ struct io61_file {
 };
 
 static int file_region(off_t off) {
+<<<<<<< HEAD
     if (off < 48) return 0;
     else if (off < 1024) return 1;
     else return 2;
+=======
+    if (off < 48) {
+        return 0;
+    } else if (off < 1024) {
+        return 1;
+    } else {
+        return 2;
+    }
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 bool may_overlap_with_other_lock(io61_file* f, off_t off, off_t len) {
     int rstart = file_region(off), rend = file_region(off + len - 1);
     for (int ri = rstart; ri <= rend; ++ri) {
+<<<<<<< HEAD
         if (f->reg[ri].locked > 0 && f->reg[ri].owner != std::this_thread::get_id()) return true;
+=======
+        if (f->reg[ri].locked > 0 && f->reg[ri].owner != std::this_thread::get_id()) {
+            return true;
+        }
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
     }
     return false;
 }
@@ -170,24 +191,42 @@ ssize_t io61_write(io61_file* f, const unsigned char* buf, size_t sz) {
 }
 
 // io61_flush(f)
-//    If `f` was opened for writes, `io61_flush(f)` forces a write of any
-//    cached data written to `f`. Returns 0 on success; returns -1 if an error
-//    is encountered before all cached data was written.
+//    If `f` was opened for writes, `io61_flush(f)` forces a write of any
+//    cached data written to `f`. Returns 0 on success; returns -1 if an error
+//    is encountered before all cached data was written.
 //
+<<<<<<< HEAD
 //    If `f` was opened read-only and is seekable, `io61_flush(f)` drops any
 //    data cached for reading and seeks to the logical file position.
+=======
+//    If `f` was opened read-only and is seekable, `io61_flush(f)` drops any
+//    data cached for reading and seeks to the logical file position.
+
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 static int io61_flush_dirty(io61_file* f);
 static int io61_flush_dirty_positioned(io61_file* f);
 static int io61_flush_clean(io61_file* f);
 
 int io61_flush(io61_file* f) {
+<<<<<<< HEAD
     std::unique_lock lock(f->rm);
     if (f->dirty && f->positioned) return io61_flush_dirty_positioned(f);
     else if (f->dirty) return io61_flush_dirty(f);
     else return io61_flush_clean(f);
+=======
+    std::unique_lock lock(f->rm);
+    if (f->dirty && f->positioned) {
+        return io61_flush_dirty_positioned(f);
+    } else if (f->dirty) {
+        return io61_flush_dirty(f);
+    } else {
+        return io61_flush_clean(f);
+    }
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // io61_seek(f, off)
+<<<<<<< HEAD
 //    Changes the file pointer for file `f` to `off` bytes into the file.
 //    Returns 0 on success and -1 on failure.
 int io61_seek(io61_file* f, off_t off) {
@@ -198,11 +237,29 @@ int io61_seek(io61_file* f, off_t off) {
     f->tag = f->pos_tag = f->end_tag = off;
     f->positioned = false;
     return 0;
+=======
+//    Changes the file pointer for file `f` to `off` bytes into the file.
+//    Returns 0 on success and -1 on failure.
+
+int io61_seek(io61_file* f, off_t off) {
+    int r = io61_flush(f);
+    if (r == -1) {
+        return -1;
+    }
+    off_t roff = lseek(f->fd, off, SEEK_SET);
+    if (roff == -1) {
+        return -1;
+    }
+    f->tag = f->pos_tag = f->end_tag = off;
+    f->positioned = false;
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // Helper functions
 
 // io61_fill(f)
+<<<<<<< HEAD
 //    Fill the cache by reading from the file. Returns 0 on success,
 //    -1 on error. Used only for non-positioned files.
 static int io61_fill(io61_file* f) {
@@ -215,9 +272,28 @@ static int io61_fill(io61_file* f) {
     }
     f->end_tag += nr;
     return 0;
+=======
+//    Fill the cache by reading from the file. Returns 0 on success,
+//    -1 on error. Used only for non-positioned files.
+
+static int io61_fill(io61_file* f) {
+    assert(f->tag == f->end_tag && f->pos_tag == f->end_tag);
+    ssize_t nr;
+    while (true) {
+        nr = read(f->fd, f->cbuf, f->cbufsz);
+        if (nr >= 0) {
+            break;
+        } else if (errno != EINTR && errno != EAGAIN) {
+            return -1;
+        }
+    }
+    f->end_tag += nr;
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // io61_flush_*(f)
+<<<<<<< HEAD
 //    Helper functions for io61_flush.
 static int io61_flush_dirty(io61_file* f) {
     // Called when `f`'s cache is dirty and not positioned.
@@ -253,14 +329,63 @@ static int io61_flush_clean(io61_file* f) {
         f->tag = f->end_tag = f->pos_tag;
     }
     return 0;
+=======
+//    Helper functions for io61_flush.
+
+static int io61_flush_dirty(io61_file* f) {
+    // Called when `f`’s cache is dirty and not positioned.
+    // Uses `write`; assumes that the initial file position equals `f->tag`.
+    off_t flush_tag = f->tag;
+    while (flush_tag != f->end_tag) {
+        ssize_t nw = write(f->fd, &f->cbuf[flush_tag - f->tag],
+                           f->end_tag - flush_tag);
+        if (nw >= 0) {
+            flush_tag += nw;
+        } else if (errno != EINTR && errno != EINVAL) {
+            return -1;
+        }
+    }
+    f->dirty = false;
+    f->tag = f->pos_tag = f->end_tag;
+    return 0;
+}
+
+static int io61_flush_dirty_positioned(io61_file* f) {
+    // Called when `f`’s cache is dirty and positioned.
+    // Uses `pwrite`; does not change file position.
+    off_t flush_tag = f->tag;
+    while (flush_tag != f->end_tag) {
+        ssize_t nw = pwrite(f->fd, &f->cbuf[flush_tag - f->tag],
+                            f->end_tag - flush_tag, flush_tag);
+        if (nw >= 0) {
+            flush_tag += nw;
+        } else if (errno != EINTR && errno != EINVAL) {
+            return -1;
+        }
+    }
+    f->dirty = false;
+    return 0;
+}
+
+static int io61_flush_clean(io61_file* f) {
+    // Called when `f`’s cache is clean.
+    if (!f->positioned && f->seekable) {
+        if (lseek(f->fd, f->pos_tag, SEEK_SET) == -1) {
+            return -1;
+        }
+        f->tag = f->end_tag = f->pos_tag;
+    }
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // POSITIONED I/O FUNCTIONS
 
 // io61_pread(f, buf, sz, off)
-//    Read up to `sz` bytes from `f` into `buf`, starting at offset `off`.
-//    Returns the number of characters read or -1 on error.
+//    Read up to `sz` bytes from `f` into `buf`, starting at offset `off`.
+//    Returns the number of characters read or -1 on error.
 //
+<<<<<<< HEAD
 //    This function can only be called when `f` was opened in read/write
 //    more (O_RDWR).
 static int io61_pfill(io61_file* f, off_t off);
@@ -274,12 +399,32 @@ ssize_t io61_pread(io61_file* f, unsigned char* buf, size_t sz, off_t off) {
     size_t ncopy = std::min(sz, nleft);
     memcpy(buf, &f->cbuf[off - f->tag], ncopy);
     return ncopy;
+=======
+//    This function can only be called when `f` was opened in read/write
+//    more (O_RDWR).
+
+static int io61_pfill(io61_file* f, off_t off);
+
+ssize_t io61_pread(io61_file* f, unsigned char* buf, size_t sz,
+                   off_t off) {
+    std::unique_lock lock(f->rm);
+    if (!f->positioned || off < f->tag || off >= f->end_tag) {
+        if (io61_pfill(f, off) == -1) {
+            return -1;
+        }
+    }
+    size_t nleft = f->end_tag - off;
+    size_t ncopy = std::min(sz, nleft);
+    memcpy(buf, &f->cbuf[off - f->tag], ncopy);
+    return ncopy;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // io61_pwrite(f, buf, sz, off)
-//    Write up to `sz` bytes from `buf` into `f`, starting at offset `off`.
-//    Returns the number of characters written or -1 on error.
+//    Write up to `sz` bytes from `buf` into `f`, starting at offset `off`.
+//    Returns the number of characters written or -1 on error.
 //
+<<<<<<< HEAD
 //    This function can only be called when `f` was opened in read/write
 //    more (O_RDWR).
 ssize_t io61_pwrite(io61_file* f, const unsigned char* buf, size_t sz, off_t off) {
@@ -292,9 +437,28 @@ ssize_t io61_pwrite(io61_file* f, const unsigned char* buf, size_t sz, off_t off
     memcpy(&f->cbuf[off - f->tag], buf, ncopy);
     f->dirty = true;
     return ncopy;
+=======
+//    This function can only be called when `f` was opened in read/write
+//    more (O_RDWR).
+
+ssize_t io61_pwrite(io61_file* f, const unsigned char* buf, size_t sz,
+                    off_t off) {
+    std::unique_lock lock(f->rm);
+    if (!f->positioned || off < f->tag || off >= f->end_tag) {
+        if (io61_pfill(f, off) == -1) {
+            return -1;
+        }
+    }
+    size_t nleft = f->end_tag - off;
+    size_t ncopy = std::min(sz, nleft);
+    memcpy(&f->cbuf[off - f->tag], buf, ncopy);
+    f->dirty = true;
+    return ncopy;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // io61_pfill(f, off)
+<<<<<<< HEAD
 //    Fill the single-slot cache with data including offset `off`.
 //    The handout code rounds `off` down to a multiple of 8192.
 static int io61_pfill(io61_file* f, off_t off) {
@@ -307,17 +471,38 @@ static int io61_pfill(io61_file* f, off_t off) {
     f->end_tag = off + nr;
     f->positioned = true;
     return 0;
+=======
+//    Fill the single-slot cache with data including offset `off`.
+//    The handout code rounds `off` down to a multiple of 8192.
+
+static int io61_pfill(io61_file* f, off_t off) {
+    assert(f->mode == O_RDWR);
+    if (f->dirty && io61_flush(f) == -1) {
+        return -1;
+    }
+
+    off = off - (off % 8192);
+    ssize_t nr = pread(f->fd, f->cbuf, f->cbufsz, off);
+    if (nr == -1) {
+        return -1;
+    }
+    f->tag = off;
+    f->end_tag = off + nr;
+    f->positioned = true;
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // FILE LOCKING FUNCTIONS
 
 // io61_try_lock(f, off, len, locktype)
-//    Attempts to acquire a lock on offsets `[off, off + len)` in file `f`.
-//    `locktype` must be `LOCK_EX`, which requests an exclusive lock,
-//    or `LOCK_SH`, which requests an shared lock. (The applications we
-//    provide in pset 6 only ever use `LOCK_EX`; `LOCK_SH` support is extra
-//    credit.)
+//    Attempts to acquire a lock on offsets `[off, off + len)` in file `f`.
+//    `locktype` must be `LOCK_EX`, which requests an exclusive lock,
+//    or `LOCK_SH`, which requests an shared lock. (The applications we
+//    provide in pset 6 only ever use `LOCK_EX`; `LOCK_SH` support is extra
+//    credit.)
 //
+<<<<<<< HEAD
 //    Returns 0 if the lock was acquired and -1 if it was not. Does not
 //    block: if// io61_try_lock(f, off, len, locktype) [continued]
 //    block: if the lock cannot be acquired, it returns -1 right away.
@@ -331,15 +516,36 @@ int io61_try_lock(io61_file* f, off_t off, off_t len, int locktype) {
         f->reg[ri].owner = std::this_thread::get_id();
     }
     return 0;
+=======
+//    Returns 0 if the lock was acquired and -1 if it was not. Does not
+//    block: if the lock cannot be acquired, it returns -1 right away.
+
+int io61_try_lock(io61_file* f, off_t off, off_t len, int locktype) {
+    (void) locktype;
+    if (len == 0) {
+        return 0;
+    }
+    std::unique_lock guard(f->m);
+    if (may_overlap_with_other_lock(f, off, len)) {
+        return -1;
+    }
+    // account for new lock
+    for (int ri = file_region(off); ri <= file_region(off + len - 1); ++ri) {
+        ++f->reg[ri].locked;
+        f->reg[ri].owner = std::this_thread::get_id();
+    }
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // io61_lock(f, off, len, locktype)
-//    Acquire a lock on offsets `[off, off + len)` in file `f`.
-//    `locktype` must be `LOCK_EX`, which requests an exclusive lock,
-//    or `LOCK_SH`, which requests an shared lock. (The applications we
-//    provide in pset 6 only ever use `LOCK_EX`; `LOCK_SH` support is extra
-//    credit.)
+//    Acquire a lock on offsets `[off, off + len)` in file `f`.
+//    `locktype` must be `LOCK_EX`, which requests an exclusive lock,
+//    or `LOCK_SH`, which requests an shared lock. (The applications we
+//    provide in pset 6 only ever use `LOCK_EX`; `LOCK_SH` support is extra
+//    credit.)
 //
+<<<<<<< HEAD
 //    Returns 0 if the lock was acquired and -1 on error. Blocks until
 //    the lock can be acquired; the -1 return value is reserved for true
 //    error conditions, such as EDEADLK (a deadlock was detected).
@@ -355,9 +561,31 @@ int io61_lock(io61_file* f, off_t off, off_t len, int locktype) {
         f->reg[ri].owner = std::this_thread::get_id();
     }
     return 0;
+=======
+//    Returns 0 if the lock was acquired and -1 on error. Blocks until
+//    the lock can be acquired; the -1 return value is reserved for true
+//    error conditions, such as EDEADLK (a deadlock was detected).
+
+int io61_lock(io61_file* f, off_t off, off_t len, int locktype) {
+    (void) locktype;
+    if (len == 0) {
+        return 0;
+    }
+    std::unique_lock guard(f->m);
+    while (may_overlap_with_other_lock(f, off, len)) {
+        f->cv.wait(guard);
+    }
+    // account for new lock
+    for (int ri = file_region(off); ri <= file_region(off + len - 1); ++ri) {
+        ++f->reg[ri].locked;
+        f->reg[ri].owner = std::this_thread::get_id();
+    }
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // io61_unlock(f, off, len)
+<<<<<<< HEAD
 //    Release the lock on offsets `[off, off + len)` in file `f`.
 //    Returns 0 on success and -1 on error.
 int io61_unlock(io61_file* f, off_t off, off_t len) {
@@ -368,39 +596,69 @@ int io61_unlock(io61_file* f, off_t off, off_t len) {
     }
     f->cv.notify_all();
     return 0;
+=======
+//    Release the lock on offsets `[off, off + len)` in file `f`.
+//    Returns 0 on success and -1 on error.
+
+int io61_unlock(io61_file* f, off_t off, off_t len) {
+    if (len == 0) {
+        return 0;
+    }
+    std::unique_lock guard(f->m);
+    // Account for unlock
+    for (int ri = file_region(off); ri <= file_region(off + len - 1); ++ri) {
+        --f->reg[ri].locked;
+    }
+    f->cv.notify_all();
+    return 0;
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 }
 
 // HELPER FUNCTIONS
 // You shouldn't need to change these functions.
 
 // io61_open_check(filename, mode)
+<<<<<<< HEAD
 //    Opens the file corresponding to `filename` and returns its io61_file.
 //    If `!filename`, returns either the standard input or the
 //    standard output, depending on `mode`. Exits with an error message if
 //    `filename != nullptr` and the named file cannot be opened.
+=======
+//    Opens the file corresponding to `filename` and returns its io61_file.
+//    If `!filename`, returns either the standard input or the
+//    standard output, depending on `mode`. Exits with an error message if
+//    `filename != nullptr` and the named file cannot be opened.
+
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 io61_file* io61_open_check(const char* filename, int mode) {
-    int fd;
-    if (filename) {
-        fd = open(filename, mode, 0666);
-    } else if ((mode & O_ACCMODE) == O_RDONLY) {
-        fd = STDIN_FILENO;
-    } else {
-        fd = STDOUT_FILENO;
-    }
-    if (fd < 0) {
-        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
-        exit(1);
-    }
-    return io61_fdopen(fd, mode & O_ACCMODE);
+    int fd;
+    if (filename) {
+        fd = open(filename, mode, 0666);
+    } else if ((mode & O_ACCMODE) == O_RDONLY) {
+        fd = STDIN_FILENO;
+    } else {
+        fd = STDOUT_FILENO;
+    }
+    if (fd < 0) {
+        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
+        exit(1);
+    }
+    return io61_fdopen(fd, mode & O_ACCMODE);
 }
 
 // io61_fileno(f)
+<<<<<<< HEAD
 //    Returns the file descriptor associated with `f`.
+=======
+//    Returns the file descriptor associated with `f`.
+
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
 int io61_fileno(io61_file* f) {
-    return f->fd;
+    return f->fd;
 }
 
 // io61_filesize(f)
+<<<<<<< HEAD
 //    Returns the size of `f` in bytes. Returns -1 if `f` does not have a
 //    well-defined size (for instance, if it is a pipe).
 off_t io61_filesize(io61_file* f) {
@@ -409,3 +667,17 @@ off_t io61_filesize(io61_file* f) {
     if (r >= 0 && S_ISREG(s.st_mode)) return s.st_size;
     else return -1;
 }
+=======
+//    Returns the size of `f` in bytes. Returns -1 if `f` does not have a
+//    well-defined size (for instance, if it is a pipe).
+
+off_t io61_filesize(io61_file* f) {
+    struct stat s;
+    int r = fstat(f->fd, &s);
+    if (r >= 0 && S_ISREG(s.st_mode)) {
+        return s.st_size;
+    } else {
+        return -1;
+    }
+}
+>>>>>>> 76fabe5b1f52153fe9c0a08839ffadd37dba2887
